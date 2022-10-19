@@ -1,0 +1,70 @@
+html {
+    background-color: black;
+    color: white;
+}
+
+.button-row {
+    width: 33%;
+    display: flex;
+    align-items: stretch;
+}
+
+.button-item {
+    flex: 1 1 auto;
+}
+
+.status-row {
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+}
+
+.status-item {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+}
+
+.status-field {
+    min-width: 4ch;
+}
+
+.report-row {
+    width: 100%;
+    display: flex;
+    flex-flow: column;
+}
+
+.report-item {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+}
+
+
+
+
+.progress-bar {
+    min-height: 4ch;
+    width: 100%;
+    position: relative;
+}
+.progress-text {
+    min-height: 4ch;
+    position: absolute;
+    bottom: -1ch;
+    left: 1ch;
+    z-index: 10;
+}
+.progress-value {
+    min-height: 3.6ch;
+    background-color: rgba(255, 0, 0, 0.5);
+    width: 0px;
+    position: absolute;
+    bottom: -0.2ch
+}
+
+.progress-complete {
+    min-height: 4ch;
+    position: relative;
+    bottom: -1ch;
+    left: 1ch;
+}

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Loader Testing</title>
+</head>
+<body>
+    <script src="/static/threading2.js"></script>
+    <link rel="stylesheet" href="/static/threading2.css">
+    <h1>Testing</h1>
+    <div style="width:60ch">
+        <div class="button-row">
+            <button onclick="startProcess()" class="button-item">Start Process</button>
+            <button onClick="clearHistory()" class="button-item">Clear Screen</button>
+        </div>
+        <div class="status-row">
+            <div class="status-item">
+                <label for="proc-completed"><b>Completed:</b></label>
+                <span id="proc-completed" class="status-field">?</span>
+            </div>
+            <div class="status-item">
+                <label for="proc-active"><b>Active:</b></label>
+                <span id="proc-active" class="status-field">?</span>
+            </div>
+            <div class="status-item">
+                <label for="proc-queued"><b>Queued:</b></label>
+                <span id="proc-queued" class="status-field">?</span>
+            </div>
+        </div>
+        <div>
+            <div class="report-row" id="proc-reports"></div>
+        </div>
+    </div>
+</body>
+</html>

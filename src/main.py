@@ -31,7 +31,7 @@ pool_mgr: PoolManager
 
 @app.get('/')
 def get_root(request: Request):
-    return app_templates.TemplateResponse('threading.html', {'request': request})
+    return app_templates.TemplateResponse('threading2.html', {'request': request})
 
 
 async def consumer(q: Queue):
@@ -49,7 +49,7 @@ async def consumer(q: Queue):
             if op == 'start' or op == 'finish':
                 await sock_mgr.broadcast(pool_mgr.status())
         except queue.Empty:
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.1)
 
 
 @app.on_event('startup')
