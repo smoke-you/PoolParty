@@ -9,6 +9,16 @@
     <h1>Testing</h1>
     <button onclick="startProcess()">Start Process</button>
     <button onClick="clearHistory()">Clear Screen</button>
-    <table id="proc_reports"></table>
+    <table>
+        <tr>
+            <td>Completed:</td>
+            <td id="proc-completed" style="min-width:5ch">?</td>
+            <td>Active:</td>
+            <td id="proc-active" style="min-width:5ch">?</td>
+            <td>Queued:</td>
+            <td id="proc-queued" style="min-width:5ch">?</td>
+        </tr>
+    </table>
+    <table id="proc-reports"></table>
 </body>
 </html>

@@ -1,7 +1,7 @@
 
 .progress-bar {
     background-color: lightgrey;
-    width: 200px;
+    width: 40ch;
     min-height: 20px;
     position: relative;
 }
@@ -14,4 +14,12 @@
 }
 .progress-value {
     min-height: 20px;
+    background-color: blue;
+    width: 0px;
+}
+
+.progress-complete {
+    min-height: 20px;
+    background-color: white;
+    color: black;
 }

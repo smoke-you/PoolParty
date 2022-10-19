@@ -15,6 +15,8 @@ from multiprocessing import Pool, Manager, Queue
 from pathlib import Path
 
 from ConnectionManager import ConnectionManager
+from PoolManager import PoolManager
+from Producer import Producer
 
 
 app = FastAPI()
@@ -22,86 +24,60 @@ app_path = Path(__file__).parent
 app.mount('/static', StaticFiles(directory=app_path.joinpath('static')), name='static')
 app_templates = Jinja2Templates(directory=app_path.joinpath('templates'))
 sock_mgr = ConnectionManager()
-proc_pool: Pool
-proc_queue: Queue
-proc_cnt = 0
+# the pool manager (and other multiprocessing objects, including Pool and 
+# Queue) *cannot* be initialized until fastAPI has started
+pool_mgr: PoolManager
 
 
 @app.get('/')
 def get_root(request: Request):
-    # return FileResponse(app_path.joinpath('threading.html'))
     return app_templates.TemplateResponse('threading.html', {'request': request})
-
-
-class ProducerMessage():
-    @abstractmethod
-    def start(id: int, max: int) -> dict:
-        return {'op': 'start', 'id': id, 'max': max}
-
-    @abstractmethod
-    def progress(id: int, value: int) -> dict:
-        return {'op': 'progress', 'id': id, 'value': value}
-
-    @abstractmethod
-    def finish(id: int) -> dict:
-        return {'op': 'finish', 'id': id}
-
-    @abstractmethod
-    def error(id: int) -> dict:
-        return {'op': 'error', 'id': id}
-
-
-
-def producer(id: int, q: Queue):
-    lifespan = random.randint(3, 12)
-    q.put(ProducerMessage.start(id, lifespan))
-    cnt = 0
-    while True:
-        q.put(ProducerMessage.progress(id, cnt))
-        time.sleep(1)
-        cnt += 1
-        if cnt >= lifespan:
-            q.put(ProducerMessage.finish(id))
-            return
 
 
 async def consumer(q: Queue):
     while True:
         try:
-            await sock_mgr.broadcast(q.get(False, 1))
+            msg = q.get(False)
+            await sock_mgr.broadcast(msg)
+            op = msg.get('op', None)
+            if op == 'start':
+                pool_mgr.active_cnt += 1
+                pool_mgr.queue_cnt -= 1
+            elif op == 'finish':
+                pool_mgr.complete_cnt += 1
+                pool_mgr.active_cnt -= 1
+            if op == 'start' or op == 'finish':
+                await sock_mgr.broadcast(pool_mgr.status())
         except queue.Empty:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0)
 
 
 @app.on_event('startup')
 async def startup_event():
-    global proc_pool, proc_queue
-    pcnt = 4
-    proc_queue = Manager().Queue()
-    proc_pool = Pool(pcnt)
-    asyncio.create_task(consumer(proc_queue))
+    global pool_mgr
+    pool_mgr = PoolManager(4, Producer.process)
+    asyncio.create_task(consumer(pool_mgr.queue))
 
 
 @app.websocket('/ws')
 async def websocket_endpoint(sock: WebSocket):
-    global proc_pool, proc_cnt, proc_queue
     try:
         await sock_mgr.connect(sock)
+        await sock.send_json(pool_mgr.status())
         while True:
             try:
                 msg = await asyncio.wait_for(sock.receive_json(), 1)
                 op = msg.get('op', None)
                 if op == 'start':
-                    proc_pool.apply_async(func=producer, args=(proc_cnt, proc_queue))
-                    proc_cnt += 1
+                    pool_mgr.start()
             except WebSocketDisconnect:
                 raise WebSocketDisconnect
             except:
                 pass
     except WebSocketDisconnect:
-        pass
+        print(f'Client at (\'{sock.client.host}\',{sock.client.port}) disconnected OK')
     except Exception as ex:
-        print(f'WebSocket disconnected unexpectedly:\n{ex}')
+        print(f'Client at (\'{sock.client.host}\',{sock.client.port}) disconnected unexpectedly:\n{ex}')
     finally:
         sock_mgr.disconnect(sock)
 
