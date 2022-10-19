@@ -1,0 +1,17 @@
+
+.progress-bar {
+    background-color: lightgrey;
+    width: 200px;
+    min-height: 20px;
+    position: relative;
+}
+.progress-text {
+    min-height: 20px;
+    color: white;
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+.progress-value {
+    min-height: 20px;
+}
