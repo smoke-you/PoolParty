@@ -73,7 +73,7 @@ function completeProgressBar(id) {
         baseBar = progBar.parentElement;
         baseWidth = baseBar.offsetWidth;
         baseBar.innerHTML = '';
-        baseBar.className = '';
+        baseBar.className = 'progress-complete';
         baseBar.style.width = baseWidth + 'px';
         baseBar.innerText = 'Process ' + id;
     }

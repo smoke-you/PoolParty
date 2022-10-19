@@ -10,7 +10,7 @@ class PoolManager:
     def __init__(self, poolsz: int, func: Callable[[int, Queue],Any]):
         self.poolsz = poolsz
         self.pool = Pool(self.poolsz)
-        self.queue = Manager().Queue(poolsz * 16 + 32)
+        self.queue = Manager().Queue(0)
         self.func = func
         self.next_proc_id = 0
         self.queue_cnt = 0
