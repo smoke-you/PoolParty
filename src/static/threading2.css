@@ -4,13 +4,14 @@ html {
 }
 
 .button-row {
-    width: 33%;
+    width: 100%;
     display: flex;
-    align-items: stretch;
+    justify-content: space-evenly;
 }
 
 .button-item {
-    flex: 1 1 auto;
+    width: 10ch;
+    height: 6ch;
 }
 
 .status-row {
@@ -37,34 +38,38 @@ html {
 .report-item {
     flex: 1 1 auto;
     flex-wrap: nowrap;
+    display: flex;
+    align-items: center;
+    flex-flow: row;
+    height: 40px;
 }
 
+.report-title {
+    background-color: black;
+    width: 16ch;
+}
 
-
-
-.progress-bar {
-    min-height: 4ch;
-    width: 100%;
+.report-bar {
+    flex: 1 1 auto;
+    border: 1px solid lightgrey;
+    height: 100%;
     position: relative;
 }
-.progress-text {
-    min-height: 4ch;
+
+.report-progress {
     position: absolute;
-    bottom: -1ch;
-    left: 1ch;
-    z-index: 10;
-}
-.progress-value {
-    min-height: 3.6ch;
-    background-color: rgba(255, 0, 0, 0.5);
-    width: 0px;
-    position: absolute;
-    bottom: -0.2ch
+    height: 80%;
+    bottom: 10%;
+    background-color: red;
 }
 
-.progress-complete {
-    min-height: 4ch;
-    position: relative;
-    bottom: -1ch;
-    left: 1ch;
+.report-complete {
+    flex: 1 1 auto;
+    color: red;
+}
+
+.remove-complete {
+    color: red;
+    width: 4ch;
+    height: 100%;
 }

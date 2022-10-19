@@ -1,4 +1,4 @@
-const sock = new WebSocket('ws://' + location.host + '/ws')
+let sock = new WebSocket('ws://' + location.host + '/ws')
 sock.onmessage = handleWebsocketMessage;
 
 
@@ -42,21 +42,24 @@ function handleWebsocketMessage(event) {
 
 function createProgressBar(id, max) {
     let target = document.getElementById('proc-reports');
-    let baseDiv = Object.assign(document.createElement('div'), { 
-        className: 'report-item progress-bar'
+    let wrapper = Object.assign(document.createElement('div'), {
+        className: 'report-item', id: 'proc_' + id
     });
-    baseDiv.appendChild(Object.assign(document.createElement('div'), { 
-        className: 'progress-text', innerText: 'Process ' + id
+    wrapper.appendChild(Object.assign(document.createElement('label'), {
+        className: 'report-title', innerText: 'Process ' + id
     }));
-    baseDiv.appendChild(Object.assign(document.createElement('div'), {
-        className: 'progress-value', id: 'proc_' + id, maxValue: max
+    let bar = wrapper.appendChild(Object.assign(document.createElement('div'), {
+        className: 'report-bar'
     }));
-    target.insertBefore(baseDiv, target.children[0]);
+    bar.appendChild(Object.assign(document.createElement('div'), {
+        className: 'report-progress', id: 'bar_' + id, maxValue: max
+    }));
+    target.insertBefore(wrapper, target.children[0]);
 }
 
 
 function updateProgressBar(id, value, max) {
-    let progbar = document.getElementById('proc_' + id);
+    let progbar = document.getElementById('bar_' + id);
     if (progbar !== null) {
         baseWidth = progbar.parentElement.offsetWidth;
         progbar.style.width = ((value * baseWidth) / progbar.maxValue) + 'px';
@@ -69,19 +72,29 @@ function updateProgressBar(id, value, max) {
 
 
 function completeProgressBar(id) {
-    let progBar = document.getElementById('proc_' + id);
+    let progBar = document.getElementById('bar_' + id);
     if (progBar !== null) {
-        baseBar = progBar.parentElement;
-        baseWidth = baseBar.offsetWidth;
-        baseBar.innerHTML = '';
-        baseBar.className = 'progress-complete';
-        baseBar.style.width = baseWidth + 'px';
-        baseBar.innerText = 'Process ' + id;
+        let wrapper = progBar.parentElement.parentElement;
+        wrapper.removeChild(progBar.parentElement);
+        wrapper.appendChild(Object.assign(document.createElement('div'), {
+            className: 'report-complete', innerText: 'Completed'
+        }));
+        delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
+            className: 'remove-complete', innerText: 'X', targetId: id
+        }));
+        delbutton.onclick = function(ev) { removeReport(ev); };
     }
     else {
         createProgressBar(id, 1);
         completeProgressBar(id);
     }
+}
+
+
+function removeReport(ev) {
+    document.getElementById('proc-reports').removeChild(
+        document.getElementById('proc_' + ev.srcElement.targetId)
+    );
 }
 
 
