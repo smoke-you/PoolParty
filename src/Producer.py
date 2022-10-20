@@ -47,7 +47,12 @@ class Producer():
         lifespan = random.randint(3, 12) * 10
         cnt = 0
         try:
-            outq.put(Producer.start(id, lifespan))
+            while True:
+                try:
+                    outq.put(Producer.start(id, lifespan))
+                    break
+                except:
+                    time.sleep(0.1)
             while True:
                 try:
                     msg = inq.get_nowait()
@@ -57,19 +62,39 @@ class Producer():
                     else:
                         op = msg.get('op', None)
                         if op == ClientOperations.CANCEL.value:
-                            outq.put(Producer.cancel(id))
-                            return
+                            while True:
+                                try:
+                                    outq.put(Producer.cancel(id))
+                                    return
+                                except:
+                                    time.sleep(0.1)
                 except (queue.Empty, TypeError):
                     pass
                 except BaseException as ex:
                     print(ex)
                 if cnt >= lifespan:
+                    try:
+                        outq.put(Producer.progress(id, lifespan, lifespan))
+                    except:
+                        pass
                     break
                 if cnt % 10 == 0:
-                    outq.put(Producer.progress(id, cnt, lifespan))
+                    try:
+                        outq.put(Producer.progress(id, cnt, lifespan))
+                    except:
+                        pass
                 time.sleep(0.1)
                 cnt += 1
-            outq.put(Producer.finish(id))
-            return
+            while True:
+                try:
+                    outq.put(Producer.finish(id))
+                    return
+                except:
+                    time.sleep(0.1)
         except BaseException as ex:
-            outq.put(Producer.error(id))
+            print(ex)
+            while True:
+                try:
+                    outq.put(Producer.error(id))
+                except:
+                    time.sleep(0.1)

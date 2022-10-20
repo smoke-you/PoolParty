@@ -49,7 +49,6 @@ function handleServerMessage(event) {
             completeProgressBar(msg.id);
             break;
         case ServerOperations.ERROR:
-            console.log(msg);
             errorProgressBar(msg.id);
             break;
         case ServerOperations.CANCEL:

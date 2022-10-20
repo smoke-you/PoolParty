@@ -25,7 +25,7 @@ app.mount('/static', StaticFiles(directory=app_path.joinpath('static')), name='s
 app_templates = Jinja2Templates(directory=app_path.joinpath('templates'))
 sock_mgr = ConnectionManager()
 # the pool manager (and other multiprocessing objects, including Pool and 
-# Queue) *cannot* be initialized until fastAPI has started
+# Queue) *cannot* be initialized until *after* fastAPI has started
 pool_mgr: PoolManager
 
 
@@ -44,7 +44,7 @@ async def consumer(outq: Queue):
             if op == ServerOperations.START.value:
                 pool_mgr.task_started(id)
             elif op in (ServerOperations.FINISH.value, ServerOperations.ERROR.value, ServerOperations.CANCEL.value):
-                pool_mgr.task_finished(id)
+                pool_mgr.task_finished(op, id)
         except queue.Empty:
             await asyncio.sleep(0.1)
 
