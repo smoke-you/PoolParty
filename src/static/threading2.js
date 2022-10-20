@@ -12,7 +12,7 @@ const ClientOperations = {
 };
 
 
-let sock = new WebSocket('ws://' + location.host + '/ws')
+const sock = new WebSocket('ws://' + location.host + '/ws')
 sock.onmessage = handleServerMessage;
 
 
@@ -26,9 +26,13 @@ function cancelProcess(id) {
 }
 
 
+function cancelAllProcesses() {
+    sock.send(JSON.stringify({ op: ClientOperations.CANCEL, id: null }));
+}
+
+
 function clearHistory() {
-    const target = document.getElementById('proc-reports');
-    target.innerHTML = '';
+    document.getElementById('proc-reports').innerHTML = '';
 }
 
 
@@ -45,6 +49,8 @@ function handleServerMessage(event) {
             completeProgressBar(msg.id);
             break;
         case ServerOperations.ERROR:
+            console.log(msg);
+            errorProgressBar(msg.id);
             break;
         case ServerOperations.CANCEL:
             cancelProgressBar(msg.id);
@@ -122,6 +128,27 @@ function cancelProgressBar(id) {
         wrapper.removeChild(document.getElementById('cancel_' + id));
         wrapper.appendChild(Object.assign(document.createElement('div'), {
             className: 'report-complete', innerText: 'Cancelled'
+        }));
+        delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
+            className: 'remove-report', innerText: 'X', targetId: 'proc_' + id
+        }));
+        delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
+    }
+    else {
+        createProgressBar(id, 1);
+        completeProgressBar(id);
+    }
+}
+
+
+function errorProgressBar(id) {
+    let progBar = document.getElementById('bar_' + id);
+    if (progBar !== null) {
+        let wrapper = progBar.parentElement.parentElement;
+        wrapper.removeChild(progBar.parentElement);
+        wrapper.removeChild(document.getElementById('cancel_' + id));
+        wrapper.appendChild(Object.assign(document.createElement('div'), {
+            className: 'report-complete', innerText: 'Error'
         }));
         delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
             className: 'remove-report', innerText: 'X', targetId: 'proc_' + id

@@ -44,32 +44,32 @@ class Producer():
 
     @abstractmethod
     def process(id: int, outq: Queue, inq: Queue):
+        lifespan = random.randint(3, 12) * 10
+        cnt = 0
         try:
-            lifespan = random.randint(3, 12) * 10
-            outq.put(Producer.start(id, lifespan), True, 1)
-            cnt = 0
+            outq.put(Producer.start(id, lifespan))
             while True:
                 try:
-                    msg = inq.get(False)
+                    msg = inq.get_nowait()
                     op_id = msg.get('id', None)
-                    if not op_id:
-                        pass
-                    elif op_id != id:
+                    if op_id and op_id != id:
                         inq.put(msg)
                     else:
                         op = msg.get('op', None)
                         if op == ClientOperations.CANCEL.value:
-                            outq.put(Producer.cancel(id), True, 1)
+                            outq.put(Producer.cancel(id))
                             return
-                except queue.Empty:
+                except (queue.Empty, TypeError):
                     pass
+                except BaseException as ex:
+                    print(ex)
                 if cnt >= lifespan:
                     break
                 if cnt % 10 == 0:
-                    outq.put(Producer.progress(id, cnt, lifespan), True, 1)
+                    outq.put(Producer.progress(id, cnt, lifespan))
                 time.sleep(0.1)
                 cnt += 1
             outq.put(Producer.finish(id))
-        except Exception as ex:
-            print(f'wtf?\n===================\n{ex}')
+            return
+        except BaseException as ex:
             outq.put(Producer.error(id))

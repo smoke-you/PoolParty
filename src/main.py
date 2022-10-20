@@ -43,7 +43,7 @@ async def consumer(outq: Queue):
             id = msg.get('id', None)
             if op == ServerOperations.START.value:
                 pool_mgr.task_started(id)
-            elif op == ServerOperations.FINISH.value:
+            elif op in (ServerOperations.FINISH.value, ServerOperations.ERROR.value, ServerOperations.CANCEL.value):
                 pool_mgr.task_finished(id)
         except queue.Empty:
             await asyncio.sleep(0.1)
