@@ -11,12 +11,12 @@ from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.websockets import WebSocket, WebSocketDisconnect
-from multiprocessing import Pool, Manager, Queue
+from multiprocessing import Queue
 from pathlib import Path
 
 from ConnectionManager import ConnectionManager
 from PoolManager import PoolManager
-from Producer import Producer
+from Producer import ClientOperations, Producer, ServerOperations
 
 
 app = FastAPI()
@@ -34,20 +34,17 @@ def get_root(request: Request):
     return app_templates.TemplateResponse('threading2.html', {'request': request})
 
 
-async def consumer(q: Queue):
+async def consumer(outq: Queue):
     while True:
         try:
-            msg = q.get(False)
+            msg = outq.get(False)
             await sock_mgr.broadcast(msg)
             op = msg.get('op', None)
-            if op == 'start':
-                pool_mgr.active_cnt += 1
-                pool_mgr.queue_cnt -= 1
-            elif op == 'finish':
-                pool_mgr.complete_cnt += 1
-                pool_mgr.active_cnt -= 1
-            if op == 'start' or op == 'finish':
-                await sock_mgr.broadcast(pool_mgr.status())
+            id = msg.get('id', None)
+            if op == ServerOperations.START.value:
+                pool_mgr.task_started(id)
+            elif op == ServerOperations.FINISH.value:
+                pool_mgr.task_finished(id)
         except queue.Empty:
             await asyncio.sleep(0.1)
 
@@ -56,7 +53,7 @@ async def consumer(q: Queue):
 async def startup_event():
     global pool_mgr
     pool_mgr = PoolManager(4, Producer.process)
-    asyncio.create_task(consumer(pool_mgr.queue))
+    asyncio.create_task(consumer(pool_mgr.outq))
 
 
 @app.websocket('/ws')
@@ -68,8 +65,10 @@ async def websocket_endpoint(sock: WebSocket):
             try:
                 msg = await asyncio.wait_for(sock.receive_json(), 1)
                 op = msg.get('op', None)
-                if op == 'start':
-                    pool_mgr.start()
+                if op == ClientOperations.START.value:
+                    pool_mgr.queue_task()
+                elif op == ClientOperations.CANCEL.value:
+                    pool_mgr.cancel_task(msg)
             except WebSocketDisconnect:
                 raise WebSocketDisconnect
             except:

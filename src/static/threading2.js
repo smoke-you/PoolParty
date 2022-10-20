@@ -1,11 +1,28 @@
+const ServerOperations = {
+    START       : 'start',
+    PROGRESS    : 'progress',
+    FINISH      : 'finish',
+    ERROR       : 'error',
+    CANCEL      : 'cancel',
+    POOL        : 'pool',
+};
+const ClientOperations = {
+    START       : 'start',
+    CANCEL      : 'cancel',
+};
+
+
 let sock = new WebSocket('ws://' + location.host + '/ws')
-sock.onmessage = handleWebsocketMessage;
+sock.onmessage = handleServerMessage;
 
 
 function startProcess() {
-    let msg = {};
-    msg.op = 'start';
-    sock.send(JSON.stringify(msg));
+    sock.send(JSON.stringify({ op: ClientOperations.START }));
+}
+
+
+function cancelProcess(id) {
+    sock.send(JSON.stringify({ op: ClientOperations.CANCEL, id: id}));
 }
 
 
@@ -15,24 +32,25 @@ function clearHistory() {
 }
 
 
-function handleWebsocketMessage(event) {
-    const data = JSON.parse(event.data);
-    // console.log(data);
-    switch(data.op) {
-        case 'start':
-            createProgressBar(data.id, data.max);
+function handleServerMessage(event) {
+    const msg = JSON.parse(event.data);
+    switch(msg.op) {
+        case ServerOperations.START:
+            createProgressBar(msg.id, msg.max);
             break;
-        case 'progress':
-            updateProgressBar(data.id, data.value, data.max);
+        case ServerOperations.PROGRESS:
+            updateProgressBar(msg.id, msg.value, msg.max);
             break;
-        case 'finish':
-            completeProgressBar(data.id);
+        case ServerOperations.FINISH:
+            completeProgressBar(msg.id);
             break;
-        case 'error':
+        case ServerOperations.ERROR:
             break;
-        case 'pool':
-            // console.log(data);
-            updatePoolStatus(data.completed, data.active, data.queued);
+        case ServerOperations.CANCEL:
+            cancelProgressBar(msg.id);
+            break;
+        case ServerOperations.POOL:
+            updatePoolStatus(msg.completed, msg.active, msg.queued);
             break;
         default:
             ;
@@ -48,6 +66,10 @@ function createProgressBar(id, max) {
     wrapper.appendChild(Object.assign(document.createElement('label'), {
         className: 'report-title', innerText: 'Process ' + id
     }));
+    cancelBtn = wrapper.appendChild(Object.assign(document.createElement('button'), {
+        className: 'report-cancel', id: 'cancel_' + id, innerText: 'X', targetId: id
+    }));
+    cancelBtn.onclick = function(ev) { cancelProcess(ev.srcElement.targetId); };
     let bar = wrapper.appendChild(Object.assign(document.createElement('div'), {
         className: 'report-bar'
     }));
@@ -76,13 +98,14 @@ function completeProgressBar(id) {
     if (progBar !== null) {
         let wrapper = progBar.parentElement.parentElement;
         wrapper.removeChild(progBar.parentElement);
+        wrapper.removeChild(document.getElementById('cancel_' + id));
         wrapper.appendChild(Object.assign(document.createElement('div'), {
             className: 'report-complete', innerText: 'Completed'
         }));
         delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
-            className: 'remove-complete', innerText: 'X', targetId: id
+            className: 'remove-report', innerText: 'X', targetId: 'proc_' + id
         }));
-        delbutton.onclick = function(ev) { removeReport(ev); };
+        delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
     }
     else {
         createProgressBar(id, 1);
@@ -91,9 +114,30 @@ function completeProgressBar(id) {
 }
 
 
-function removeReport(ev) {
+function cancelProgressBar(id) {
+    let progBar = document.getElementById('bar_' + id);
+    if (progBar !== null) {
+        let wrapper = progBar.parentElement.parentElement;
+        wrapper.removeChild(progBar.parentElement);
+        wrapper.removeChild(document.getElementById('cancel_' + id));
+        wrapper.appendChild(Object.assign(document.createElement('div'), {
+            className: 'report-complete', innerText: 'Cancelled'
+        }));
+        delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
+            className: 'remove-report', innerText: 'X', targetId: 'proc_' + id
+        }));
+        delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
+    }
+    else {
+        createProgressBar(id, 1);
+        completeProgressBar(id);
+    }
+}
+
+
+function removeReport(id) {
     document.getElementById('proc-reports').removeChild(
-        document.getElementById('proc_' + ev.srcElement.targetId)
+        document.getElementById(id)
     );
 }
 
