@@ -4,7 +4,7 @@ from multiprocessing import Queue
 import queue
 import random
 import time
-from typing import Any
+from typing import Any, Optional
 
 class ServerOperations(Enum):
     START = 'start'
@@ -22,79 +22,67 @@ class ClientOperations(Enum):
 
 class Producer():
 
-    @abstractmethod
-    def start(id: int, max: int) -> dict:
+    @classmethod
+    def start(cls, id: int, max: int) -> dict:
         return {'op': ServerOperations.START.value, 'id': id, 'max': max}
 
-    @abstractmethod
-    def progress(id: int, value: int, max: int) -> dict:
+    @classmethod
+    def progress(cls, id: int, value: int, max: int) -> dict:
         return {'op': ServerOperations.PROGRESS.value, 'id': id, 'value': value, 'max': max}
 
-    @abstractmethod
-    def finish(id: int) -> dict:
+    @classmethod
+    def finish(cls, id: int) -> dict:
         return {'op': ServerOperations.FINISH.value, 'id': id}
 
-    @abstractmethod
-    def cancel(id: int) -> dict:
+    @classmethod
+    def cancel(cls, id: int) -> dict:
         return {'op': ServerOperations.CANCEL.value, 'id': id}
 
-    @abstractmethod
-    def error(id: int) -> dict:
+    @classmethod
+    def error(cls, id: int) -> dict:
         return {'op': ServerOperations.ERROR.value, 'id': id}
 
-    @abstractmethod
-    def process(id: int, outq: Queue, inq: Queue):
-        lifespan = random.randint(3, 12) * 10
+    @classmethod
+    def process(cls, id: int, outq: Queue, inq: Queue):
+        def safesend(q: queue, msg: dict, interval: Optional[float] = None):
+            if interval:
+                while True:
+                    try:
+                        q.put(msg)
+                        break
+                    except:
+                        time.sleep(interval)
+            else:
+                try:
+                    q.put(msg)
+                except:
+                    pass
+
+        lifespan = random.randint(15, 30) * 10
         cnt = 0
         try:
-            while True:
-                try:
-                    outq.put(Producer.start(id, lifespan))
-                    break
-                except:
-                    time.sleep(0.1)
+            safesend(outq, Producer.start(id, lifespan), 0.01)
             while True:
                 try:
                     msg = inq.get_nowait()
-                    op_id = msg.get('id', None)
-                    if op_id and op_id != id:
-                        inq.put(msg)
+                    if msg.get('id', None) != id:
+                        safesend(inq, msg, 0.01)
                     else:
-                        op = msg.get('op', None)
-                        if op == ClientOperations.CANCEL.value:
-                            while True:
-                                try:
-                                    outq.put(Producer.cancel(id))
-                                    return
-                                except:
-                                    time.sleep(0.1)
+                        if msg.get('op', None) == ClientOperations.CANCEL.value:
+                            safesend(outq, Producer.cancel(id), 0.01)
+                            return
                 except (queue.Empty, TypeError):
                     pass
                 except BaseException as ex:
                     print(ex)
                 if cnt >= lifespan:
-                    try:
-                        outq.put(Producer.progress(id, lifespan, lifespan))
-                    except:
-                        pass
+                    safesend(outq, Producer.progress(id, lifespan, lifespan))
                     break
-                if cnt % 10 == 0:
-                    try:
-                        outq.put(Producer.progress(id, cnt, lifespan))
-                    except:
-                        pass
+                elif cnt % 10 == 0:
+                    safesend(outq, Producer.progress(id, cnt, lifespan))
                 time.sleep(0.1)
                 cnt += 1
-            while True:
-                try:
-                    outq.put(Producer.finish(id))
-                    return
-                except:
-                    time.sleep(0.1)
+            safesend(outq, Producer.finish(id), 0.01)
         except BaseException as ex:
             print(ex)
-            while True:
-                try:
-                    outq.put(Producer.error(id))
-                except:
-                    time.sleep(0.1)
+            safesend(outq, Producer.error(id), 0.01)

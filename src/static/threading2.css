@@ -1,6 +1,16 @@
 html {
     background-color: black;
     color: white;
+    font-family: Arial !important;
+}
+
+.connection-blink {
+    animation: connection-blink-frames 0.5s infinite alternate;
+}
+
+@keyframes connection-blink-frames {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .button-row {
@@ -29,13 +39,13 @@ html {
     min-width: 4ch;
 }
 
-.report-row {
+.work-row {
     width: 100%;
     display: flex;
     flex-flow: column;
 }
 
-.report-item {
+.work-item {
     flex: 1 1 auto;
     flex-wrap: nowrap;
     display: flex;
@@ -44,37 +54,37 @@ html {
     height: 4ch;
 }
 
-.report-title {
+.work-title {
     background-color: black;
-    width: 16ch;
+    padding-right: 1ch;
+    min-width: 11ch;
 }
 
-.report-cancel {
+.work-cancel {
     color: green;
-    width: 4ch;
     height: 80%;
 }
 
-.report-bar {
+.work-bar {
     flex: 1 1 auto;
     border: 1px solid lightgrey;
     height: 100%;
     position: relative;
 }
 
-.report-progress {
+.work-progress {
     position: absolute;
     height: 80%;
     bottom: 10%;
     background-color: red;
 }
 
-.report-complete {
+.work-complete {
     flex: 1 1 auto;
     color: red;
 }
 
-.remove-report {
+.remove-history {
     color: red;
     width: 4ch;
     height: 80%;

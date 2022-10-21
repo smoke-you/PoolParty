@@ -7,28 +7,31 @@
     <script src="/static/threading2.js"></script>
     <link rel="stylesheet" href="/static/threading2.css">
     <h1>Testing</h1>
+    <label><b>Link State: </b></label><label id="sock-state">Down</label><br><br>
     <div style="width:60ch">
         <div class="button-row">
-            <button onclick="startProcess()" class="button-item">Start Process</button>
-            <button onclick="cancelAllProcesses()" class="button-item">Cancel All</button>
-            <button onclick="clearHistory()" class="button-item">Clear Screen</button>
+            <button onclick="startWork()" class="button-item">Start Process</button>
+            <button onclick="cancelAllWork()" class="button-item">Cancel All</button>
+            <button onclick="clearHistory()" class="button-item">Clear History</button>
         </div>
+        <br>
         <div class="status-row">
             <div class="status-item">
-                <label for="proc-completed"><b>Completed:</b></label>
-                <span id="proc-completed" class="status-field">?</span>
+                <label for="work-completed"><b>Completed:</b></label>
+                <span id="work-completed" class="status-field">?</span>
             </div>
             <div class="status-item">
-                <label for="proc-active"><b>Active:</b></label>
-                <span id="proc-active" class="status-field">?</span>
+                <label for="work-active"><b>Active:</b></label>
+                <span id="work-active" class="status-field">?</span>
             </div>
             <div class="status-item">
-                <label for="proc-queued"><b>Queued:</b></label>
-                <span id="proc-queued" class="status-field">?</span>
+                <label for="work-queued"><b>Queued:</b></label>
+                <span id="work-queued" class="status-field">?</span>
             </div>
         </div>
+        <br>
         <div>
-            <div class="report-row" id="proc-reports"></div>
+            <div class="report-row" id="work-reports"></div>
         </div>
     </div>
 </body>

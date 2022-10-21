@@ -1,8 +1,11 @@
 from abc import abstractmethod
 import asyncio
+from collections import namedtuple
 from concurrent.futures import Future, ProcessPoolExecutor
+from enum import Enum
 from multiprocessing import Queue, Manager
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
+from xmlrpc.client import Server
 
 from Producer import ClientOperations, ServerOperations, Producer
 
@@ -15,9 +18,9 @@ class PoolManager(object):
         self.outq = Manager().Queue()
         self.inq = Manager().Queue()
         self.work = work
-        self.next_proc_id = 1
+        self.next_work_id = 1
         self.complete_cnt = 0
-        self.active_procs = ActiveProcessList()
+        self.worklist = WorkList()
         asyncio.create_task(self.monitor_inq())
 
     def __del__(self):
@@ -28,7 +31,7 @@ class PoolManager(object):
         while True:
             try:
                 msg = self.inq.get(False)
-                if self.active_procs.contains_id(msg.get('id', None)):
+                if self.worklist.contains_id(msg.get('id', None)):
                     self.inq.put(msg)
                 await asyncio.sleep(0.5)
             except BaseException:
@@ -36,11 +39,11 @@ class PoolManager(object):
 
     def queue_task(self):
         try:
-            self.active_procs.append((
-                self.next_proc_id, 
-                self.pool.submit(self.work, self.next_proc_id, self.outq, self.inq)
-                ))
-            self.next_proc_id += 1
+            self.worklist.append_new(
+                id=self.next_work_id, 
+                f=self.pool.submit(self.work, self.next_work_id, self.outq, self.inq)
+                )
+            self.next_work_id += 1
             self.outq.put(self.status(), False)        
         except Exception as ex:
             print(ex)
@@ -48,56 +51,73 @@ class PoolManager(object):
     def cancel_task(self, msg: dict):
         msg_id = msg.get('id', None)
         msg_op = msg.get('op', None)
-        if self.active_procs.contains_id(msg_id):
+        if self.worklist.contains_id(msg_id):
             self.inq.put(msg)
         elif msg_op == ClientOperations.CANCEL.value:
             if msg_id is not None:
                 # report that the id has already been cancelled
                 self.outq.put(Producer.cancel(msg_id))
             else:
-                # cancel all queued tasks, remove them from active_procs
-                cancelled = []
-                for p in self.active_procs:
-                    try:
-                        if p[1].cancel():
-                            cancelled.append(p)
-                    except:
-                        pass
-                for p in cancelled:
-                    self.active_procs.remove(p)
+                # attempt to cancel any cancellable tasks, i.e. remove them from the pool
+                self.worklist.cancel_all()
                 # send cancel messages to all of the remaining tasks via inq
-                for p in self.active_procs:
-                    self.inq.put({'op': ClientOperations.CANCEL.value, 'id': p[0]})
+                for p in self.worklist:
+                    self.inq.put({'op': ClientOperations.CANCEL.value, 'id': p.id})
                 # report the resulting status change to the clients
                 self.outq.put(PoolManager.status())
 
     def task_started(self, id: int):
+        workitem = self.worklist.get_id(id)
+        if workitem:
+            workitem.state = WorkState.RUNNING
         self.outq.put(self.status(), False)
 
     def task_finished(self, op: str, id: int):
-        self.active_procs.remove_id(id)
-        if op == ServerOperations.FINISH.value:
-            self.complete_cnt += 1
+        self.worklist.remove_id(id)
+        workitem = self.worklist.get_id(id)
+        if workitem:
+            if op == ServerOperations.FINISH.value:
+                self.complete_cnt += 1
+                workitem.state = WorkState.FINISHED
+            elif op in (ServerOperations.ERROR.value, ServerOperations.CANCEL.value):
+                workitem.state = WorkState.FINISHED
         self.outq.put(self.status(), False)
 
     def status(self) -> dict:
-        pcnt, acnt = self.active_procs.counts()
+        qcnt, rcnt = self.worklist.counts()
         return {
             'op': ServerOperations.POOL.value, 
             'completed': self.complete_cnt, 
-            'active': acnt, 
-            'queued': pcnt
+            'active': rcnt, 
+            'queued': qcnt
             }
 
 
-class ActiveProcessList(list[tuple[int, Future]]):
+class WorkState(Enum):
+    QUEUED = 0
+    RUNNING = 1
+    FINISHED = 2
+
+
+class WorkItem:
+    def __init__(self, id: int, f: Future):
+        self.id = id
+        self.state = WorkState.QUEUED
+        self.future = f
+
+
+class WorkList(list[WorkItem]):
+
     def __init__(self):
         super().__init__()
+
+    def append_new(self, id: int, f: Future):
+        super().append(WorkItem(id, f))
 
     def remove_id(self, id: int):
         target = None
         for p in self:
-            if p[0] == id:
+            if p.id == id:
                 target = p
                 break
         if target:
@@ -107,29 +127,34 @@ class ActiveProcessList(list[tuple[int, Future]]):
         if id is None:
             return False
         for p in self:
-            if p[0] == id:
+            if p.id == id:
                 return True
         return False
-    
-    def gen_pending(self) -> tuple[int, Future]:
+
+    def get_id(self, id: int):
+        if id is not None:
+            for p in self:
+                if p.id == id:
+                    return p
+        return None
+
+    def cancel_all(self):
+        cancelled = list[WorkItem]()
         for p in self:
-            if not any((p[1].running, p[1].cancelled, p[1].done)):
-                yield p
-
-    def pending(self) -> list[int, Future]:
-        return [self.gen_pending()]
-
-    def counts(self) -> tuple[int, int]: # pending, active
+            try:
+                if p.future.cancel():
+                    cancelled.append(p)
+            except:
+                pass
+        for p in cancelled:
+            self.remove(p)
+    
+    def counts(self) -> tuple[int, int]: # queued, running
         pcnt = 0
         acnt = 0
         for p in self:
-            r = p[1].running
-            c = p[1].cancelled
-            d = p[1].done
-            if r:
-                acnt += 1
-            elif not(r and c and d):
+            if p.state == WorkState.QUEUED:
                 pcnt += 1
+            elif p.state == WorkState.RUNNING:
+                acnt += 1
         return pcnt, acnt
-        
-        

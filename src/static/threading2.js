@@ -14,25 +14,38 @@ const ClientOperations = {
 
 const sock = new WebSocket('ws://' + location.host + '/ws')
 sock.onmessage = handleServerMessage;
+sock.onclose = handleServerClose;
+sock.onerror = handleServerError;
+sock.onopen = handleServerOpen;
 
-
-function startProcess() {
-    sock.send(JSON.stringify({ op: ClientOperations.START }));
+function handleServerClose(ev) {
+    console.log(ev);
+    const target = document.getElementById('sock-state');
+    target.className = 'connection-blink';
+    target.innerText = 'DOWN';
+    target.style.color = 'white';
+    target.style.fontWeight = 'bold';
+    document.getElementById('work-completed').innerText = '?';
+    document.getElementById('work-active').innerText = '?';
+    document.getElementById('work-queued').innerText = '?';
 }
 
-
-function cancelProcess(id) {
-    sock.send(JSON.stringify({ op: ClientOperations.CANCEL, id: id}));
+function handleServerError(ev) {
+    console.log(ev);
+    const target = document.getElementById('sock-state');
+    target.className = 'connection-blink';
+    target.innerText = 'ERROR';
+    target.style.color = 'red';
+    target.style.fontWeight = 'bold';
 }
 
-
-function cancelAllProcesses() {
-    sock.send(JSON.stringify({ op: ClientOperations.CANCEL, id: null }));
-}
-
-
-function clearHistory() {
-    document.getElementById('proc-reports').innerHTML = '';
+function handleServerOpen(ev) {
+    console.log(ev);
+    const target = document.getElementById('sock-state');
+    target.className = '';
+    target.innerText = 'UP';
+    target.style.color = 'green';
+    target.style.fontWeight = 'bold';
 }
 
 
@@ -46,13 +59,16 @@ function handleServerMessage(event) {
             updateProgressBar(msg.id, msg.value, msg.max);
             break;
         case ServerOperations.FINISH:
-            completeProgressBar(msg.id);
+            finalizeProgressBar(msg.id, 'Completed');
+            // completeProgressBar(msg.id);
             break;
         case ServerOperations.ERROR:
-            errorProgressBar(msg.id);
+            finalizeProgressBar(msg.id, 'Error');
+            // errorProgressBar(msg.id);
             break;
         case ServerOperations.CANCEL:
-            cancelProgressBar(msg.id);
+            finalizeProgressBar(msg.id, 'Cancelled');
+            // cancelProgressBar(msg.id);
             break;
         case ServerOperations.POOL:
             updatePoolStatus(msg.completed, msg.active, msg.queued);
@@ -63,23 +79,43 @@ function handleServerMessage(event) {
 }
 
 
+function startWork() {
+    sock.send(JSON.stringify({ op: ClientOperations.START }));
+}
+
+
+function cancelWork(id) {
+    sock.send(JSON.stringify({ op: ClientOperations.CANCEL, id: id}));
+}
+
+
+function cancelAllWork() {
+    sock.send(JSON.stringify({ op: ClientOperations.CANCEL, id: null }));
+}
+
+
+function clearHistory() {
+    document.getElementById('work-reports').innerHTML = '';
+}
+
+
 function createProgressBar(id, max) {
-    let target = document.getElementById('proc-reports');
+    let target = document.getElementById('work-reports');
     let wrapper = Object.assign(document.createElement('div'), {
-        className: 'report-item', id: 'proc_' + id
+        className: 'work-item', id: 'work_' + id
     });
     wrapper.appendChild(Object.assign(document.createElement('label'), {
-        className: 'report-title', innerText: 'Process ' + id
+        className: 'work-title', innerText: 'Process ' + id
     }));
     cancelBtn = wrapper.appendChild(Object.assign(document.createElement('button'), {
-        className: 'report-cancel', id: 'cancel_' + id, innerText: 'X', targetId: id
+        className: 'work-cancel', id: 'cancel_' + id, innerText: 'Cancel', targetId: id
     }));
-    cancelBtn.onclick = function(ev) { cancelProcess(ev.srcElement.targetId); };
+    cancelBtn.onclick = function(ev) { cancelWork(ev.srcElement.targetId); };
     let bar = wrapper.appendChild(Object.assign(document.createElement('div'), {
-        className: 'report-bar'
+        className: 'work-bar'
     }));
     bar.appendChild(Object.assign(document.createElement('div'), {
-        className: 'report-progress', id: 'bar_' + id, maxValue: max
+        className: 'work-progress', id: 'bar_' + id, maxValue: max
     }));
     target.insertBefore(wrapper, target.children[0]);
 }
@@ -98,78 +134,36 @@ function updateProgressBar(id, value, max) {
 }
 
 
-function completeProgressBar(id) {
+function finalizeProgressBar(id, text) {
     let progBar = document.getElementById('bar_' + id);
     if (progBar !== null) {
         let wrapper = progBar.parentElement.parentElement;
         wrapper.removeChild(progBar.parentElement);
         wrapper.removeChild(document.getElementById('cancel_' + id));
         wrapper.appendChild(Object.assign(document.createElement('div'), {
-            className: 'report-complete', innerText: 'Completed'
+            className: 'work-complete', innerText: text
         }));
         delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
-            className: 'remove-report', innerText: 'X', targetId: 'proc_' + id
+            className: 'remove-history', innerText: 'X', targetId: 'work_' + id
         }));
         delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
     }
     else {
         createProgressBar(id, 1);
-        completeProgressBar(id);
-    }
-}
-
-
-function cancelProgressBar(id) {
-    let progBar = document.getElementById('bar_' + id);
-    if (progBar !== null) {
-        let wrapper = progBar.parentElement.parentElement;
-        wrapper.removeChild(progBar.parentElement);
-        wrapper.removeChild(document.getElementById('cancel_' + id));
-        wrapper.appendChild(Object.assign(document.createElement('div'), {
-            className: 'report-complete', innerText: 'Cancelled'
-        }));
-        delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
-            className: 'remove-report', innerText: 'X', targetId: 'proc_' + id
-        }));
-        delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
-    }
-    else {
-        createProgressBar(id, 1);
-        completeProgressBar(id);
-    }
-}
-
-
-function errorProgressBar(id) {
-    let progBar = document.getElementById('bar_' + id);
-    if (progBar !== null) {
-        let wrapper = progBar.parentElement.parentElement;
-        wrapper.removeChild(progBar.parentElement);
-        wrapper.removeChild(document.getElementById('cancel_' + id));
-        wrapper.appendChild(Object.assign(document.createElement('div'), {
-            className: 'report-complete', innerText: 'Error'
-        }));
-        delbutton = wrapper.appendChild(Object.assign(document.createElement('button'), {
-            className: 'remove-report', innerText: 'X', targetId: 'proc_' + id
-        }));
-        delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
-    }
-    else {
-        createProgressBar(id, 1);
-        completeProgressBar(id);
+        finalizeProgressBar(id, classname, text);
     }
 }
 
 
 function removeReport(id) {
-    document.getElementById('proc-reports').removeChild(
+    document.getElementById('work-reports').removeChild(
         document.getElementById(id)
     );
 }
 
 
 function updatePoolStatus(completed, active, queued) {
-    document.getElementById('proc-completed').innerText = completed;
-    document.getElementById('proc-active').innerText = active
-    document.getElementById('proc-queued').innerText = queued;
+    document.getElementById('work-completed').innerText = completed;
+    document.getElementById('work-active').innerText = active;
+    document.getElementById('work-queued').innerText = queued;
 }

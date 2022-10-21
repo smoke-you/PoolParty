@@ -1,4 +1,3 @@
-from abc import abstractmethod
 import asyncio
 import queue
 import random
@@ -56,6 +55,12 @@ async def startup_event():
     asyncio.create_task(consumer(pool_mgr.outq))
 
 
+@app.on_event('shutdown')
+async def shutdown_event():
+    global pool_mgr
+    pool_mgr.pool.shutdown()
+
+
 @app.websocket('/ws')
 async def websocket_endpoint(sock: WebSocket):
     try:
@@ -82,4 +87,4 @@ async def websocket_endpoint(sock: WebSocket):
 
 
 if __name__ == '__main__':
-    uvicorn.run('main:app', host='192.168.56.102', port=7000, reload=True)
+    uvicorn.run('main:app', host='192.168.56.102', port=6999, reload=True)
