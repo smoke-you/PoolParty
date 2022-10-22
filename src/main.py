@@ -24,7 +24,7 @@ work_mgr = WorkManager(4, Worker.process, sock_mgr.broadcast)
 
 @app.get('/')
 def get_root(request: Request):
-    return app_templates.TemplateResponse('threading2.html', {'request': request})
+    return app_templates.TemplateResponse('threading.html', {'request': request})
 
 
 @app.on_event('startup')

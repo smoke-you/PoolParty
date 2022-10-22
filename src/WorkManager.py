@@ -1,11 +1,12 @@
 import asyncio
+
 from concurrent.futures import Future, ProcessPoolExecutor
 from enum import Enum
 from multiprocessing import Pipe
 from multiprocessing.connection import Connection, wait
 from typing import Any, Awaitable, Callable
 
-from Producer import ClientOperations, ServerOperations, Producer
+from Worker import ClientOperations, ServerOperations
 
 class WorkManager(object):
 

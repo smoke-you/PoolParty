@@ -1,7 +1,9 @@
-from enum import Enum
-from multiprocessing.connection import Connection
 import random
 import time
+
+from enum import Enum
+from multiprocessing.connection import Connection
+
 
 class ServerOperations(Enum):
     START = 'start'
