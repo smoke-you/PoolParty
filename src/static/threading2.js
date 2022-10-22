@@ -60,15 +60,12 @@ function handleServerMessage(event) {
             break;
         case ServerOperations.FINISH:
             finalizeProgressBar(msg.id, 'Completed');
-            // completeProgressBar(msg.id);
             break;
         case ServerOperations.ERROR:
             finalizeProgressBar(msg.id, 'Error');
-            // errorProgressBar(msg.id);
             break;
         case ServerOperations.CANCEL:
             finalizeProgressBar(msg.id, 'Cancelled');
-            // cancelProgressBar(msg.id);
             break;
         case ServerOperations.POOL:
             updatePoolStatus(msg.completed, msg.active, msg.queued);
@@ -147,10 +144,6 @@ function finalizeProgressBar(id, text) {
             className: 'remove-history', innerText: 'X', targetId: 'work_' + id
         }));
         delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
-    }
-    else {
-        createProgressBar(id, 1);
-        finalizeProgressBar(id, classname, text);
     }
 }
 

@@ -1,6 +1,4 @@
-from abc import abstractmethod
 import asyncio
-from collections import namedtuple
 from concurrent.futures import Future, ProcessPoolExecutor
 from enum import Enum
 from multiprocessing import Queue, Manager
@@ -23,10 +21,6 @@ class PoolManager(object):
         self.worklist = WorkList()
         asyncio.create_task(self.monitor_inq())
 
-    def __del__(self):
-        self.pool.shutdown(wait=False, cancel_futures=True)
-        super().__del__()
-
     async def monitor_inq(self):
         while True:
             try:
@@ -34,7 +28,7 @@ class PoolManager(object):
                 if self.worklist.contains_id(msg.get('id', None)):
                     self.inq.put(msg)
                 await asyncio.sleep(0.5)
-            except BaseException:
+            except:
                 await asyncio.sleep(0.1)
 
     def queue_task(self):
