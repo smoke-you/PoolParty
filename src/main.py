@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.requests import Request
 from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from pathlib import Path
 
@@ -17,15 +16,13 @@ from WorkManager import WorkManager
 app = FastAPI()
 app_path = Path(__file__).parent
 app.mount('/static', StaticFiles(directory=app_path.joinpath('static')), name='static')
-# app_templates = Jinja2Templates(directory=app_path.joinpath('templates'))
 sock_mgr = ConnectionManager()
 work_mgr = WorkManager(4, work, sock_mgr.broadcast)
 
 
 @app.get('/')
 def get_root(request: Request):
-    return FileResponse(app_path.joinpath('templates/threading.html'))
-    # return app_templates.TemplateResponse('threading.html', {'request': request})
+    return FileResponse(app_path.joinpath('static/threading.html'))
 
 
 @app.on_event('startup')
