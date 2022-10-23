@@ -1,5 +1,5 @@
-# FastThread
-Yes, it's not really a contextually-accurate project name.
+# PoolParty
+It will all make sense soon...
 
 ## Background
 I have a project for work, for which I need to be able to trigger multiple instances of server-side work (parsing and transforming uploaded files), and provide feedback to the user (a progress bar) for each file. It's an interesting problem because it pulls together a lot of (ahem) threads, including:

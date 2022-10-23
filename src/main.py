@@ -17,14 +17,15 @@ from WorkManager import WorkManager
 app = FastAPI()
 app_path = Path(__file__).parent
 app.mount('/static', StaticFiles(directory=app_path.joinpath('static')), name='static')
-app_templates = Jinja2Templates(directory=app_path.joinpath('templates'))
+# app_templates = Jinja2Templates(directory=app_path.joinpath('templates'))
 sock_mgr = ConnectionManager()
 work_mgr = WorkManager(4, work, sock_mgr.broadcast)
 
 
 @app.get('/')
 def get_root(request: Request):
-    return app_templates.TemplateResponse('threading.html', {'request': request})
+    return FileResponse(app_path.joinpath('templates/threading.html'))
+    # return app_templates.TemplateResponse('threading.html', {'request': request})
 
 
 @app.on_event('startup')
