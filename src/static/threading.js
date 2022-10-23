@@ -51,6 +51,7 @@ function handleServerOpen(ev) {
 
 function handleServerMessage(event) {
     const msg = JSON.parse(event.data);
+    console.log(msg);
     switch(msg.op) {
         case ServerOperations.START:
             createProgressBar(msg.id, msg.max);
@@ -144,6 +145,10 @@ function finalizeProgressBar(id, text) {
             className: 'remove-history', innerText: 'X', targetId: 'work_' + id
         }));
         delbutton.onclick = function(ev) { removeReport(ev.srcElement.targetId); };
+    }
+    else {
+        createProgressBar(id, 1);
+        finalizeProgressBar(id, text);
     }
 }
 

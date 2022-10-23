@@ -6,94 +6,160 @@ from multiprocessing import Pipe
 from multiprocessing.connection import Connection, wait
 from typing import Any, Awaitable, Callable
 
-from Worker import ClientOperations, ServerOperations
 
 class WorkManager(object):
 
     def __init__(self, poolsz: int, work: Callable[[int, Connection], Any], broadcast: Awaitable[dict]):
         super().__init__()
-        self.poolsz = poolsz
-        self.pool = ProcessPoolExecutor(self.poolsz)
-        self.work = work
-        self.broadcast = broadcast
-        self.next_work_id = 1
-        self.complete_cnt = 0
-        self.worklist = WorkList()
+        self.__poolsz = poolsz
+        self.__pool = ProcessPoolExecutor(self.__poolsz)
+        self.__started = False
+        self.__work = work
+        self.__broadcast = broadcast
+        self.__next_work_id = 1
+        self.__complete_cnt = 0
+        self.__worklist = WorkList()
 
 
     def start(self):
         asyncio.create_task(self.monitor_workers())
+        self.__started = True
+
+    def stop(self):
+        self.__pool.shutdown(wait=False, cancel_futures=True)
 
     async def monitor_workers(self):
         while True:
-            msglist = self.worklist.recv(id=None, timeout=0)
+            msglist = self.__worklist.recv(id=None, timeout=0)
             report = False
             if msglist:
                 for m in msglist:
-                    msg_op = m.get('op')
+                    msg_op = ServerOps.get(m.get('op'))
                     msg_id = m.get('id')
-                    if msg_op == ServerOperations.START.value:
-                        self.task_started(msg_id)
+                    if msg_op == ServerOps.START:
+                        self.work_started(msg_id)
                         report = True
-                    elif msg_op in (ServerOperations.FINISH.value, ServerOperations.ERROR.value, ServerOperations.CANCEL.value):
-                        self.task_finished(msg_op, msg_id)
+                    elif msg_op in (ServerOps.FINISH, ServerOps.ERROR, ServerOps.CANCEL):
+                        self.work_finished(msg_op, msg_id)
                         report = True
-                    await self.broadcast(m)
+                    await self.__broadcast(m)
                 if report:
-                    await self.broadcast(self.status())
+                    await self.__broadcast(self.status())
             else:
                 await asyncio.sleep(0.1)
 
-    async def queue_task(self):
+    async def handle_client_message(self, msg: dict):
+        if not self.__started:
+            return
+        msg_op = ClientOps.get(msg.get('op', None))
+        if msg_op == ClientOps.START:
+            await self.queue_work()
+        elif msg_op == ClientOps.CANCEL:
+            await self.cancel_work(msg)
+
+    async def queue_work(self):
         try:
             connA, connB = Pipe(duplex=True)
-            self.worklist.append_new(
-                id=self.next_work_id, 
-                f=self.pool.submit(self.work, self.next_work_id, connB),
+            self.__worklist.append_new(
+                id=self.__next_work_id, 
+                f=self.__pool.submit(self.__work, self.__next_work_id, connB),
                 c=connA
                 )
-            self.next_work_id += 1
-            await self.broadcast(self.status())        
+            self.__next_work_id += 1
+            await self.__broadcast(self.status())        
         except Exception as ex:
             print(ex)
 
-    async def cancel_task(self, msg: dict):
+    async def cancel_work(self, msg: dict):
         msg_id = msg.get('id', None)
-        msg_op = msg.get('op', None)
-        target = self.worklist.get_id(msg_id)
+        target = self.__worklist.get_id(msg_id)
         if target:
             target.conn.send(msg)
-        elif msg_op == ClientOperations.CANCEL.value:
-            if msg_id is not None:
-                await self.broadcast(Producer.cancel(msg_id))
-            else:
-                self.worklist.cancel_all()
-                self.worklist.broadcast(msg, True)
-                await self.broadcast(WorkManager.status())
+        elif not msg_id:
+            for w_id in self.__worklist.cancel_all():
+                await self.__broadcast(ServerOps.cancel(w_id))
+            self.__worklist.broadcast(msg, True)
+            await self.__broadcast(self.status())
 
-    def task_started(self, id: int):
-        workitem = self.worklist.get_id(id)
+    def work_started(self, id: int):
+        workitem = self.__worklist.get_id(id)
         if workitem:
             workitem.state = WorkState.RUNNING
 
-    def task_finished(self, op: str, id: int):
-        workitem = self.worklist.get_id(id)
+    def work_finished(self, msg_op: 'ServerOps', id: int):
+        workitem = self.__worklist.get_id(id)
         if workitem:
-            if op == ServerOperations.FINISH.value:
-                self.complete_cnt += 1
+            if msg_op == ServerOps.FINISH:
+                self.__complete_cnt += 1
                 workitem.state = WorkState.FINISHED
-            elif op in (ServerOperations.ERROR.value, ServerOperations.CANCEL.value):
+            elif msg_op in (ServerOps.ERROR, ServerOps.CANCEL):
                 workitem.state = WorkState.FINISHED
-            self.worklist.remove(workitem)
+            self.__worklist.remove(workitem)
 
     def status(self) -> dict:
-        qcnt, rcnt = self.worklist.counts()
-        return {
-            'op': ServerOperations.POOL.value, 
-            'completed': self.complete_cnt, 
-            'active': rcnt, 
-            'queued': qcnt
-            }
+        return ServerOps.status(self.__complete_cnt, *self.__worklist.counts())
+
+
+class ServerOps(Enum):
+    START = 'start'
+    PROGRESS = 'progress'
+    FINISH = 'finish'
+    ERROR = 'error'
+    CANCEL = 'cancel'
+    POOL = 'pool'
+
+    @classmethod
+    def get(cls, value: str|None) -> str|None:
+        if not value:
+            return None
+        try:
+            for v in cls.__members__.values():
+                if v.value == value:
+                    return v
+        except:
+            pass
+        return None
+
+    @classmethod
+    def start(cls, id: int, max: int) -> dict:
+        return {'op': cls.START.value, 'id': id, 'max': max}
+
+    @classmethod
+    def progress(cls, id: int, value: int, max: int) -> dict:
+        return {'op': cls.PROGRESS.value, 'id': id, 'value': value, 'max': max}
+
+    @classmethod
+    def finish(cls, id: int) -> dict:
+        return {'op': cls.FINISH.value, 'id': id}
+
+    @classmethod
+    def cancel(cls, id: int) -> dict:
+        return {'op': cls.CANCEL.value, 'id': id}
+
+    @classmethod
+    def error(cls, id: int) -> dict:
+        return {'op': cls.ERROR.value, 'id': id}
+
+    @classmethod
+    def status(cls, completed: int, queued: int, active: int):
+        return {'op': cls.POOL.value, 'completed': completed, 'active': active, 'queued': queued}
+
+
+class ClientOps(Enum):
+    START = 'start'
+    CANCEL = 'cancel'
+
+    @classmethod
+    def get(cls, value: str|None) -> str|None:
+        if not value:
+            return None
+        try:
+            for v in cls.__members__.values():
+                if v.value == value:
+                    return v
+        except:
+            pass
+        return None
 
 
 class WorkState(Enum):
@@ -141,7 +207,7 @@ class WorkList(list[WorkItem]):
                     return w
         return None
 
-    def cancel_all(self):
+    def cancel_all(self) -> list[int]:
         cancelled = list[WorkItem]()
         for w in self:
             try:
@@ -151,6 +217,7 @@ class WorkList(list[WorkItem]):
                 pass
         for w in cancelled:
             self.remove(w)
+        return [w.id for w in cancelled]
     
     def counts(self) -> tuple[int, int]: # queued, running
         pcnt = 0
@@ -190,4 +257,5 @@ class WorkList(list[WorkItem]):
                 # wait for any of the worker connections to contain a message, then return all of those messages :-)
                 return [m.recv() for m in wait([w.conn for w in self], timeout)]
             except:
+                # if timeout, or if one of the monitored connection objects is closed
                 return None

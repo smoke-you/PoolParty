@@ -10,7 +10,7 @@ from fastapi.websockets import WebSocket, WebSocketDisconnect
 from pathlib import Path
 
 from ConnectionManager import ConnectionManager
-from Worker import ClientOperations, Worker
+from Worker import work
 from WorkManager import WorkManager
 
 
@@ -19,7 +19,7 @@ app_path = Path(__file__).parent
 app.mount('/static', StaticFiles(directory=app_path.joinpath('static')), name='static')
 app_templates = Jinja2Templates(directory=app_path.joinpath('templates'))
 sock_mgr = ConnectionManager()
-work_mgr = WorkManager(4, Worker.process, sock_mgr.broadcast)
+work_mgr = WorkManager(4, work, sock_mgr.broadcast)
 
 
 @app.get('/')
@@ -28,15 +28,15 @@ def get_root(request: Request):
 
 
 @app.on_event('startup')
-async def startup_event():
+def startup_event():
     global work_mgr
     work_mgr.start()
 
 
 @app.on_event('shutdown')
-async def shutdown_event():
+def shutdown_event():
     global work_mgr
-    work_mgr.pool.shutdown(wait=False, cancel_futures=True)
+    work_mgr.stop()
 
 
 @app.websocket('/ws')
@@ -46,12 +46,7 @@ async def websocket_endpoint(sock: WebSocket):
         await sock.send_json(work_mgr.status())
         while True:
             try:
-                msg = await asyncio.wait_for(sock.receive_json(), 1)
-                op = msg.get('op', None)
-                if op == ClientOperations.START.value:
-                    await work_mgr.queue_task()
-                elif op == ClientOperations.CANCEL.value:
-                    await work_mgr.cancel_task(msg)
+                await work_mgr.handle_client_message(await asyncio.wait_for(sock.receive_json(), 1))
             except WebSocketDisconnect:
                 raise WebSocketDisconnect
             except:
@@ -65,4 +60,4 @@ async def websocket_endpoint(sock: WebSocket):
 
 
 if __name__ == '__main__':
-    uvicorn.run('main:app', host='192.168.56.102', port=6999, reload=True)
+    uvicorn.run('main:app', host='192.168.56.102', port=6999, reload=False)
