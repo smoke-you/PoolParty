@@ -1,4 +1,6 @@
 import asyncio
+import datetime
+import logging
 import time
 
 from concurrent.futures import Future, ProcessPoolExecutor
@@ -23,9 +25,6 @@ class WorkManager(object):
         self._worklist = WorkList()
 
     def start(self):
-        # print('starting the pool')
-        # futures.wait([self.__pool.submit(time.sleep(0))])
-        # print(f'pid\'s: {list(self.__pool._processes.keys())}')
         asyncio.create_task(self._monitor_workers())
         self._started = True
 
@@ -66,6 +65,7 @@ class WorkManager(object):
 
     async def _queue_work(self):
         try:
+            logging.info(f'Requested work id={self._next_work_id}')
             connA, connB = Pipe(duplex=True)
             self._worklist.append_new(
                 id=self._next_work_id, 
@@ -81,8 +81,10 @@ class WorkManager(object):
         msg_id = msg.get('id', None)
         target = self._worklist.get_id(msg_id)
         if target:
+            logging.info(f'Requested cancellation of work id={target.id}')
             target.conn.send(msg)
         elif not msg_id:
+            logging.info(f'Requested cancellation of work {list(map(lambda x: x.id, self._worklist))}')
             for w_id in self._worklist.cancel_all():
                 await self._broadcast(ServerOps.cancel(w_id))
             self._worklist.broadcast(msg, True)
@@ -90,6 +92,7 @@ class WorkManager(object):
 
     def _work_started(self, w: 'WorkItem | None') -> bool:
         if w:
+            logging.info(f'Work id={w.id} started')
             w.state = WorkState.RUNNING
             return True
         return False
@@ -98,11 +101,18 @@ class WorkManager(object):
         # *only* publish FINISH, ERROR (and CANCEL, but see below) messages if the workitem is queued for processing
         if w:
             if msg_op == ServerOps.FINISH:
+                duration = datetime.datetime.now() - w.timestamp
+                dur_sus = round(duration.seconds + (duration.microseconds / 1000000), 3)
+                logging.info(f'Work id={w.id} finished normally in {dur_sus}s')
                 self._complete_cnt += 1
                 w.state = WorkState.FINISHED
                 self._worklist.remove(w)
                 return True
             elif msg_op in (ServerOps.ERROR, ServerOps.CANCEL):
+                if msg_op == ServerOps.CANCEL:
+                    logging.info(f'Work id={w.id} cancelled')
+                else:
+                    logging.info(f'Work id={w.id} failed')
                 w.state = WorkState.FINISHED
                 self._worklist.remove(w)
                 return True
@@ -185,6 +195,7 @@ class WorkState(Enum):
 
 class WorkItem:
     def __init__(self, id: int, f: Future, c: Connection):
+        self.timestamp = datetime.datetime.now()
         self.id = id
         self.state = WorkState.QUEUED
         self.future = f
@@ -230,6 +241,8 @@ class WorkList(list[WorkItem]):
                     cancelled.append(w)
             except:
                 pass
+        if cancelled:
+            logging.info(f'Work {list(map(lambda x: x.id, cancelled))} cancelled from queue.')
         for w in cancelled:
             self.remove(w)
         return [w.id for w in cancelled]
