@@ -10,7 +10,7 @@ I have a project for work, for which I need to be able to trigger multiple insta
   - Provide updates (progress, errors, etc).
   - Be cancelled by users.
 
-I've spent a fair bit of time messing around with it outside of work because it's a good learning exercise (I'm a bit of a Python and webserver newb, and I was right, I learnt a lot).  Also, I will able to take `WorkManager` and drop it straight into my work project, which is very convenient.
+I've spent a fair bit of time messing around with it outside of work because it's a good learning exercise (I'm a bit of a Python and webserver newb, and I was right, I learnt a lot).  Also, I will be able to take `WorkManager` and drop it straight into my work project, which is very convenient.
 
 ## Stumbling Blocks
 I started with [`multiprocessing.Pool`](https://docs.python.org/3/library/multiprocessing.html#module-multiprocessing.pool) and tried to use `Queue` instances for IPC. Fail. It turns out:
@@ -28,12 +28,12 @@ Looking for an alternative to `Pool` (that didn't involve me writing my own proc
 - You can't cancel work items that have been started. Fair enough.
   - <a name="cancel-issue"></a>The first five (?) work items that have been queued but not actually started are placed in an intermediate state (preloaded in some way?) such that they *also* can't be cancelled. This is quite inconvenient, but addressable - see [below](#cancel-solution).
 
-I was also not happy with `Queue`, largely because of the `None` bug.  My alternative, which also makes me nervous because of scalability concerns, but which appears to work perfectly well with up to at least 40 or so queued work items, was to create a `multiprocessing.Pipe` with every work item.  The various components of each work item - a sequence number; the `Future` and `Connection[0]` from the `Pipe` are stored as a [`WorkItem`](src/WorkManager.py#L160) in a [list](src/WorkManager.py#L170) local to the [`WorkManager`](src/WorkManager.py#L1) instance, and `Connection[1]` is passed to the work item as an argument; this allows the `Pipe` to be used for IPC when the work item moves from queued to running.
+I was also not happy with `Queue`, largely because of the `None` bug.  My alternative, which also makes me nervous because of scalability concerns, but which appears to work perfectly well with up to at least 40 or so queued work items, was to create a `multiprocessing.Pipe` with every work item.  The various components of each work item - a sequence number; the `Future` and `Connection[0]` from the `Pipe` are stored as a [`WorkItem`](src/WorkManager.py#L160) in a [list](src/WorkManager.py#L170) local to the [`WorkManager`](src/WorkManager.py#L1) instance, and `Connection[1]` is passed to the work item as an argument. This allows the `Pipe` to be used for IPC when the work item moves from queued to running.
 
 ## Communications (Websocket and IPC)
 The webserver communication model is "single page", i.e. a single GET is used to load the client page (yes, there are more GET's for JS, CSS, etc, but that's not the point). Javascript is used to open a websocket to the fastAPI instance at the server. Messages are then passed as JSONified `dict` (or, from the JS perspective, `object`) instances.  Messages contain an [`op` field](src/WorkManager.py#L95), which is one of `start`, `finish`, `progress`, `error`, `cancel`, or `pool` ([the client](src/WorkManager.py#L140) can only send `start` and `cancel` messages).
 
-Work is queued by [the client sending a `start` message](src/static/threading.js#L70).  This creates a new `WorkItem`, including a `Future` and `Pipe`. <a name="cancel-solution"></a>When the work item begins executing, it first checks its `Connection` for a `cancel` message (to deal with the issue noted [above](#cancel-issue)), and if one is waiting in the `Connection` then [it emits a `cancel` message and immediately terminates](src/Worker.py#L6).
+Work is queued by [the client sending a `start` message](src/static/threading.js#L70).  This creates a new `WorkItem`, including a `Future` and `Pipe`. <a name="cancel-solution"></a>When the work item begins executing, it first checks its `Connection` for a `cancel` message (to deal with the issue noted [above](#cancel-issue)), and if one is waiting in the `Connection` then it [emits a `cancel` message and immediately terminates](src/Worker.py#L6).
 
 If the work item is not immediately cancelled, it emits a `start` message, then periodically emits `progress` messages, and finally a `finish` message if it completes normally or an `error` message if it does not. The work item must also periodically check its `Connection` for `cancel` messages and respond as above.
 
@@ -49,5 +49,11 @@ I'm really not a fan of creating a `Pipe` for every work item. Ideally, I would 
   - The `WorkManager` instantiates a `Listener`.
   - When work items are queued, their arguments include connection parameters for the `Listener`.
   - When a work item starts, it instantiates a `Client` and connects to the `Listener`, creating a `Connection`.
+  - When the work item finnishes, the `Client` disconnects from the `Listener`.
 
 Of course, both of these options mean that there is no existing communications channel into which pre-emptive `cancel` messages can be broadcast, hence the initial `start` message can't be (directly) suppressed, although it could still be caught by the `WorkManager` and not broadcast to the web clients (on the basis that the work item sequence number is not in the list of current work items).  That's probably a better solution than dozens of `Pipe` instances, but I haven't made my mind up yet.
+
+## Exploring the Possible Solutions
+For the first candidate solution, it turns out that there isn't a need to probe the individual processes of the `ProcessPoolExecutor`, and in fact it is difficult to do so reliably: absent an arbitrarily long delay in the `probe` function, the `Executor` tends to assign new tasks to previously used processes.  However, by forcing the `Executor` to start its processes up using `futures.wait([self.__pool.submit(time.sleep(0))])`, then inspecting the private dict of processes using `list(self.__pool._processes.keys())`, it is possible to obtain a list of the PID's available to the `ProcessPoolExecutor`.
+
+There is another problem with both of these candidate solutions: as already noted, it is impossible to send a `cancel` message to a pre-loaded (and hence uncancellable via `Future.cancel()`) work item, so it is not possible to directly "pre-cancel" pre-loaded work items. It would be possible to set the work item's state to e.g. `PENDING CANCELLED` and send it a `cancel` message in response to it emitting a `start` message, but I'm not convinced that the complexity is justified.
