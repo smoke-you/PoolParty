@@ -8,7 +8,10 @@ from concurrent import futures
 from enum import Enum
 from multiprocessing import Pipe
 from multiprocessing.connection import Connection, wait
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Optional
+
+
+from models import *
 
 
 class WorkManager(object):
@@ -31,13 +34,12 @@ class WorkManager(object):
     def stop(self):
         self._pool.shutdown(wait=False, cancel_futures=True)
 
-    async def handle_client_message(self, msg: dict):
+    async def handle_client_message(self, msg: ClientMessage):
         if not self._started:
             return
-        msg_op = ClientOps.get(msg.get('op', None))
-        if msg_op == ClientOps.START:
+        if isinstance(msg, ClientStart):
             await self._queue_work()
-        elif msg_op == ClientOps.CANCEL:
+        elif isinstance(msg, ClientCancel):
             await self._cancel_work(msg)
 
     async def _monitor_workers(self):
@@ -45,19 +47,17 @@ class WorkManager(object):
             msglist = self._worklist.recv(id=None, timeout=0)
             report = False
             if msglist:
-                for m in msglist:
-                    msg_op = ServerOps.get(m.get('op'))
-                    msg_id = m.get('id')
-                    w = self._worklist.get_id(msg_id)
-                    if msg_op == ServerOps.START:
+                for m in (m for m in msglist if isinstance(m, ServerMessage)):
+                    w = self._worklist.get_id(m.id)
+                    if isinstance(m, ServerStart):
                         forward = self._work_started(w)
-                    elif msg_op in (ServerOps.PROGRESS, ServerOps.POOL):
+                    elif isinstance(m, (ServerProgress, ServerStatus)):
                         forward = w != None
                     else:  # implied: FINISH, ERROR, CANCEL
-                        forward = self._work_finished(msg_op, w)
+                        forward = self._work_finished(m.op, w)
                     if forward:
                         report = True
-                        await self._broadcast(m)
+                        await self._broadcast(m.dict())
                 if report:
                     await self._broadcast(self.status())
             else:
@@ -77,16 +77,15 @@ class WorkManager(object):
         except Exception as ex:
             print(ex)
 
-    async def _cancel_work(self, msg: dict):
-        msg_id = msg.get('id', None)
-        target = self._worklist.get_id(msg_id)
+    async def _cancel_work(self, msg: ClientCancel):
+        target = self._worklist.get_id(msg.id)
         if target:
             logging.info(f'Requested cancellation of work id={target.id}')
             target.conn.send(msg)
-        elif not msg_id:
+        elif not msg.id:
             logging.info(f'Requested cancellation of work {list(map(lambda x: x.id, self._worklist))}')
             for w_id in self._worklist.cancel_all():
-                await self._broadcast(ServerOps.cancel(w_id))
+                await self._broadcast(ServerCancel(id=w_id).dict())
             self._worklist.broadcast(msg, True)
             await self._broadcast(self.status())
 
@@ -122,69 +121,71 @@ class WorkManager(object):
         return False
 
     def status(self) -> dict:
-        return ServerOps.status(self._complete_cnt, *self._worklist.counts())
+        # return ServerOps.status(self._complete_cnt, *self._worklist.counts())
+        queued, active = self._worklist.counts()
+        return ServerStatus(completed=self._complete_cnt, active=active, queued=queued).dict()
 
 
-class ServerOps(Enum):
-    START = 'start'
-    PROGRESS = 'progress'
-    FINISH = 'finish'
-    ERROR = 'error'
-    CANCEL = 'cancel'
-    POOL = 'pool'
+# class ServerOps(Enum):
+#     START = 'start'
+#     PROGRESS = 'progress'
+#     FINISH = 'finish'
+#     ERROR = 'error'
+#     CANCEL = 'cancel'
+#     POOL = 'pool'
 
-    @classmethod
-    def get(cls, value: str|None) -> str|None:
-        if not value:
-            return None
-        try:
-            for v in cls.__members__.values():
-                if v.value == value:
-                    return v
-        except:
-            pass
-        return None
+#     @classmethod
+#     def get(cls, value: str|None) -> str|None:
+#         if not value:
+#             return None
+#         try:
+#             for v in cls.__members__.values():
+#                 if v.value == value:
+#                     return v
+#         except:
+#             pass
+#         return None
 
-    @classmethod
-    def start(cls, id: int, max: int) -> dict:
-        return {'op': cls.START.value, 'id': id, 'max': max}
+#     @classmethod
+#     def start(cls, id: int, max: int) -> dict:
+#         return {'op': cls.START.value, 'id': id, 'max': max}
 
-    @classmethod
-    def progress(cls, id: int, value: int, max: int) -> dict:
-        return {'op': cls.PROGRESS.value, 'id': id, 'value': value, 'max': max}
+#     @classmethod
+#     def progress(cls, id: int, value: int, max: int) -> dict:
+#         return {'op': cls.PROGRESS.value, 'id': id, 'value': value, 'max': max}
 
-    @classmethod
-    def finish(cls, id: int) -> dict:
-        return {'op': cls.FINISH.value, 'id': id}
+#     @classmethod
+#     def finish(cls, id: int) -> dict:
+#         return {'op': cls.FINISH.value, 'id': id}
 
-    @classmethod
-    def cancel(cls, id: int) -> dict:
-        return {'op': cls.CANCEL.value, 'id': id}
+#     @classmethod
+#     def cancel(cls, id: int) -> dict:
+#         return {'op': cls.CANCEL.value, 'id': id}
 
-    @classmethod
-    def error(cls, id: int) -> dict:
-        return {'op': cls.ERROR.value, 'id': id}
+#     @classmethod
+#     def error(cls, id: int) -> dict:
+#         return {'op': cls.ERROR.value, 'id': id}
 
-    @classmethod
-    def status(cls, completed: int, queued: int, active: int):
-        return {'op': cls.POOL.value, 'completed': completed, 'active': active, 'queued': queued}
+#     @classmethod
+#     def status(cls, completed: int, queued: int, active: int):
+#         return {'op': cls.POOL.value, 'completed': completed, 'active': active, 'queued': queued}
 
 
-class ClientOps(Enum):
-    START = 'start'
-    CANCEL = 'cancel'
+# class ClientOps(Enum):
+#     START = 'start'
+#     CANCEL = 'cancel'
 
-    @classmethod
-    def get(cls, value: str|None) -> str|None:
-        if not value:
-            return None
-        try:
-            for v in cls.__members__.values():
-                if v.value == value:
-                    return v
-        except:
-            pass
-        return None
+#     @classmethod
+#     def get(cls, value: str|None) -> str|None:
+#         if not value:
+#             return None
+#         try:
+#             for v in cls.__members__.values():
+#                 if v.value == value:
+#                     return v
+#         except:
+#             pass
+#         return None
 
 
 class WorkState(Enum):
