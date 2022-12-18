@@ -114,11 +114,15 @@ def __parse_msg(types: list, msg: dict):
     raise ValueError(f"No listed message type matches 'op'='{op}'")
 
 
-def parse_client_msg(msg: dict):
-    return __parse_msg((ClientStart, ClientCancel), msg)
+__client_msg_types: tuple[ClientMessage] = (ClientStart, ClientCancel)
+__server_msg_types: tuple[ServerMessage] = (ServerCancel, ServerError, ServerFinish, ServerProgress, ServerStart, ServerStatus)
 
 
-def parse_server_msg(msg: dict):
-    return __parse_msg((ServerCancel, ServerError, ServerFinish, ServerProgress, ServerStart, ServerStatus), msg)
+def parse_client_msg(msg: dict) -> ClientMessage:
+    return __parse_msg(__client_msg_types, msg)
+
+
+def parse_server_msg(msg: dict) -> ServerMessage:
+    return __parse_msg(__server_msg_types, msg)
 
 

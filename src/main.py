@@ -12,7 +12,8 @@ from pathlib import Path
 from ConnectionManager import ConnectionManager
 from Worker import work
 from WorkManager import WorkManager
-from models import *
+from models import parse_client_msg
+
 
 app = FastAPI()
 app_path = Path(__file__).parent
@@ -57,7 +58,9 @@ async def websocket_endpoint(sock: WebSocket):
         await sock.send_json(work_mgr.status())
         while True:
             try:
-                await work_mgr.handle_client_message(parse_client_msg(await asyncio.wait_for(sock.receive_json(), 1)))
+                await work_mgr.handle_client_message(
+                    parse_client_msg(await asyncio.wait_for(sock.receive_json(), 1))
+                    )
             except WebSocketDisconnect:
                 raise WebSocketDisconnect
             except:
@@ -74,13 +77,3 @@ async def websocket_endpoint(sock: WebSocket):
 
 if __name__ == '__main__':
     uvicorn.run('main:app', host='192.168.56.102', port=6999, reload=False)
-
-    # from models import *
-
-    # msg = {'op': 'cancel'}
-    # try:
-    #     model = parse_client_msg(msg)
-    #     print('model: ', model)
-    # except Exception as ex:
-    #     print(ex)
-    

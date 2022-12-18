@@ -121,71 +121,8 @@ class WorkManager(object):
         return False
 
     def status(self) -> dict:
-        # return ServerOps.status(self._complete_cnt, *self._worklist.counts())
         queued, active = self._worklist.counts()
         return ServerStatus(completed=self._complete_cnt, active=active, queued=queued).dict()
-
-
-# class ServerOps(Enum):
-#     START = 'start'
-#     PROGRESS = 'progress'
-#     FINISH = 'finish'
-#     ERROR = 'error'
-#     CANCEL = 'cancel'
-#     POOL = 'pool'
-
-#     @classmethod
-#     def get(cls, value: str|None) -> str|None:
-#         if not value:
-#             return None
-#         try:
-#             for v in cls.__members__.values():
-#                 if v.value == value:
-#                     return v
-#         except:
-#             pass
-#         return None
-
-#     @classmethod
-#     def start(cls, id: int, max: int) -> dict:
-#         return {'op': cls.START.value, 'id': id, 'max': max}
-
-#     @classmethod
-#     def progress(cls, id: int, value: int, max: int) -> dict:
-#         return {'op': cls.PROGRESS.value, 'id': id, 'value': value, 'max': max}
-
-#     @classmethod
-#     def finish(cls, id: int) -> dict:
-#         return {'op': cls.FINISH.value, 'id': id}
-
-#     @classmethod
-#     def cancel(cls, id: int) -> dict:
-#         return {'op': cls.CANCEL.value, 'id': id}
-
-#     @classmethod
-#     def error(cls, id: int) -> dict:
-#         return {'op': cls.ERROR.value, 'id': id}
-
-#     @classmethod
-#     def status(cls, completed: int, queued: int, active: int):
-#         return {'op': cls.POOL.value, 'completed': completed, 'active': active, 'queued': queued}
-
-
-# class ClientOps(Enum):
-#     START = 'start'
-#     CANCEL = 'cancel'
-
-#     @classmethod
-#     def get(cls, value: str|None) -> str|None:
-#         if not value:
-#             return None
-#         try:
-#             for v in cls.__members__.values():
-#                 if v.value == value:
-#                     return v
-#         except:
-#             pass
-#         return None
 
 
 class WorkState(Enum):
